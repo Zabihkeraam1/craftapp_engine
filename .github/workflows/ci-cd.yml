@@ -35,10 +35,11 @@ jobs:
         run: |
           echo "Branch: ${{ github.ref_name }}"
           if [ "${{ github.ref_name }}" = "main" ]; then
-            docker build -t bitlinksai/craftapp_engine:prod .
+            docker buildx build --load -t bitlinksai/craftapp_engine:prod .
           elif [ "${{ github.ref_name }}" = "master" ]; then
-            docker build -t bitlinksai/craftapp_engine_preprod:master .
+            docker buildx build --push -t bitlinksai/craftapp_engine_preprod:master .
           fi
+
 
       - name: Stop and remove previous container
         run: |
@@ -47,13 +48,13 @@ jobs:
           docker stop craftapp_engine_preprod || true
           docker rm craftapp_engine_preprod || true
 
-      - name: Push Docker image
-        run: |
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            docker push bitlinksai/craftapp_engine:prod
-          elif [ "${{ github.ref_name }}" = "master" ]; then
-            docker push bitlinksai/craftapp_engine_preprod:master
-          fi
+      # - name: Push Docker image
+      #   run: |
+      #     if [ "${{ github.ref_name }}" = "main" ]; then
+      #       docker push bitlinksai/craftapp_engine:prod
+      #     elif [ "${{ github.ref_name }}" = "master" ]; then
+      #       docker push bitlinksai/craftapp_engine_preprod:master
+      #     fi
 
       - name: Run Docker container
         run: |
