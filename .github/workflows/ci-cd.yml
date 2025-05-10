@@ -61,7 +61,7 @@ jobs:
           if [ "${{ github.ref_name }}" = "main" ]; then
             docker run -d --name craftapp_user_backend_prod -p 3000:3001 --env-file .env.prod --restart always bitlinksai/craftapp_engine:prod
           elif [ "${{ github.ref_name }}" = "master" ]; then
-            docker run -d --name craftapp_engine_preprod  -p 3000:3000 --restart always bitlinksai/craftapp_engine_preprod:master
+            docker run -d --name craftapp_engine_preprod  -p 8000:8000 --restart always bitlinksai/craftapp_engine_preprod:master
           fi
 
       # Optional: Clean up untagged images
