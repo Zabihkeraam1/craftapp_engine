@@ -137,7 +137,6 @@ jobs:
             docker run -d \
               --name craftapp_engine_preprod \
               -p 8000:8000 \
-              --env-file .env.preprod \
               --restart always \
               bitlinksai/craftapp_engine_preprod:master
           fi
