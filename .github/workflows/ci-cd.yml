@@ -1,3 +1,75 @@
+# name: Docker Build and Deploy craftapp_engine
+
+# on:
+#   push:
+#     branches:
+#       - main
+#       - master
+
+# jobs:
+#   build-and-deploy:
+#     runs-on: self-hosted
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v3
+
+#       - name: Install dependencies
+#         run: |
+#           sudo apt update
+#           sudo apt install -y docker.io
+#           sudo systemctl enable --now docker
+#           sudo usermod -aG docker $USER
+#           mkdir -p ~/.docker/cli-plugins
+#           curl -sSL https://github.com/docker/buildx/releases/download/v0.10.0/buildx-v0.10.0.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx
+#           chmod +x ~/.docker/cli-plugins/docker-buildx
+#           docker buildx version
+
+#       - name: Log in to Docker Hub
+#         uses: docker/login-action@v2
+#         with:
+#           username: ${{ secrets.DOCKER_HUB_USERNAME }}
+#           password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+#       - name: Build Docker image
+#         run: |
+#           echo "Branch: ${{ github.ref_name }}"
+#           if [ "${{ github.ref_name }}" = "main" ]; then
+#             docker buildx build --load -t bitlinksai/craftapp_engine:prod .
+#           elif [ "${{ github.ref_name }}" = "master" ]; then
+#             docker buildx build --push -t bitlinksai/craftapp_engine_preprod:master .
+#           fi
+
+
+#       - name: Stop and remove previous container
+#         run: |
+#           docker stop craftapp_user_backend_prod || true
+#           docker rm craftapp_user_backend_prod || true
+#           docker stop craftapp_engine_preprod || true
+#           docker rm craftapp_engine_preprod || true
+
+#       # - name: Push Docker image
+#       #   run: |
+#       #     if [ "${{ github.ref_name }}" = "main" ]; then
+#       #       docker push bitlinksai/craftapp_engine:prod
+#       #     elif [ "${{ github.ref_name }}" = "master" ]; then
+#       #       docker push bitlinksai/craftapp_engine_preprod:master
+#       #     fi
+
+#       - name: Run Docker container
+#         run: |
+#           if [ "${{ github.ref_name }}" = "main" ]; then
+#             docker run -d --name craftapp_user_backend_prod -p 3000:3001 --env-file .env.prod --restart always bitlinksai/craftapp_engine:prod
+#           elif [ "${{ github.ref_name }}" = "master" ]; then
+#             docker run -d --name craftapp_engine_preprod  -p 8000:8000 --restart always bitlinksai/craftapp_engine_preprod:master
+#           fi
+
+#       # Optional: Clean up untagged images
+#       # - name: Clean up untagged images
+#       #   run: docker image prune -a -f
+
+
+
 name: Docker Build and Deploy craftapp_engine
 
 on:
@@ -14,12 +86,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install dependencies
+      - name: Ensure Docker is installed
         run: |
-          sudo apt update
-          sudo apt install -y docker.io
-          sudo systemctl enable --now docker
+          if ! command -v docker &> /dev/null; then
+            sudo apt update
+            sudo apt install -y docker.io
+            sudo systemctl enable --now docker
+          fi
           sudo usermod -aG docker $USER
+
+      - name: Install Docker Buildx
+        run: |
           mkdir -p ~/.docker/cli-plugins
           curl -sSL https://github.com/docker/buildx/releases/download/v0.10.0/buildx-v0.10.0.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx
           chmod +x ~/.docker/cli-plugins/docker-buildx
@@ -40,30 +117,30 @@ jobs:
             docker buildx build --push -t bitlinksai/craftapp_engine_preprod:master .
           fi
 
-
-      - name: Stop and remove previous container
+      - name: Stop and remove previous containers
         run: |
-          docker stop craftapp_user_backend_prod || true
-          docker rm craftapp_user_backend_prod || true
-          docker stop craftapp_engine_preprod || true
-          docker rm craftapp_engine_preprod || true
-
-      # - name: Push Docker image
-      #   run: |
-      #     if [ "${{ github.ref_name }}" = "main" ]; then
-      #       docker push bitlinksai/craftapp_engine:prod
-      #     elif [ "${{ github.ref_name }}" = "master" ]; then
-      #       docker push bitlinksai/craftapp_engine_preprod:master
-      #     fi
+          docker stop craftapp_user_backend_prod 2>/dev/null || true
+          docker rm craftapp_user_backend_prod 2>/dev/null || true
+          docker stop craftapp_engine_preprod 2>/dev/null || true
+          docker rm craftapp_engine_preprod 2>/dev/null || true
 
       - name: Run Docker container
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
-            docker run -d --name craftapp_user_backend_prod -p 3000:3001 --env-file .env.prod --restart always bitlinksai/craftapp_engine:prod
+            docker run -d \
+              --name craftapp_user_backend_prod \
+              -p 8000:8000 \
+              --env-file .env.prod \
+              --restart always \
+              bitlinksai/craftapp_engine:prod
           elif [ "${{ github.ref_name }}" = "master" ]; then
-            docker run -d --name craftapp_engine_preprod  -p 8000:8000 --restart always bitlinksai/craftapp_engine_preprod:master
+            docker run -d \
+              --name craftapp_engine_preprod \
+              -p 8000:8000 \
+              --env-file .env.preprod \
+              --restart always \
+              bitlinksai/craftapp_engine_preprod:master
           fi
 
-      # Optional: Clean up untagged images
-      # - name: Clean up untagged images
-      #   run: docker image prune -a -f
+      - name: Clean up unused Docker images
+        run: docker image prune -af --filter "until=24h"
