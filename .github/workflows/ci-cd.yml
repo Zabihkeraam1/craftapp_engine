@@ -1,0 +1,84 @@
+name: Docker Build and Deploy craftapp_engine
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+      # Check out the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Install Docker, Nginx, and Buildx
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y docker.io
+          sudo systemctl start docker
+          sudo systemctl enable docker
+          sudo usermod -aG docker $USER
+          newgrp docker
+          sudo systemctl restart docker
+          mkdir -p ~/.docker/cli-plugins
+          curl -sSL https://github.com/docker/buildx/releases/download/v0.10.0/buildx-v0.10.0.linux-amd64 -o ~/.docker/cli-plugins/docker-buildx
+          chmod +x ~/.docker/cli-plugins/docker-buildx
+          docker buildx version
+
+      # Set up Docker group
+      - name: Set up Docker group
+        run: |
+          sudo groupadd docker || true
+          sudo usermod -aG docker $USER
+          newgrp docker
+      # Log in to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      # Build the Docker image based on the branch
+      - name: Build Docker image
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            docker build -t bitlinksai/craftapp_engine:prod .
+          elif [ "${{ github.ref }}" == "refs/heads/master" ]; then
+            docker build -t bitlinksai/craftapp_engine_preprod:master .
+          fi
+
+      # Stop and remove the previous container (if running)
+      - name: Stop and remove previous container
+        run: |
+          docker stop craftapp_user_backend_prod || true
+          docker rm craftapp_user_backend_prod || true
+          docker stop craftapp_engine_preprod || true
+          docker rm craftapp_engine_preprod || true
+
+      # Push the Docker image to Docker Hub
+      - name: Push Docker image
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            docker push bitlinksai/craftapp_engine:prod
+          elif [ "${{ github.ref }}" == "refs/heads/master" ]; then
+            docker push bitlinksai/craftapp_engine_preprod:master
+          fi
+
+      # Run the Docker container
+      - name: Run Docker container
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            docker run -d --name craftapp_user_backend_prod -p 3000:3001 --env-file .env.prod --restart always bitlinksai/craftapp_engine:prod
+          elif [ "${{ github.ref }}" == "refs/heads/master" ]; then
+            docker run -d --name craftapp_engine_preprod  -p 3000:3000 --restart always bitlinksai/craftapp_engine_preprod:master
+          fi
+
+      # Clean up untagged (dangling) images
+      # - name: Clean up untagged images
+      #   run: |
+      #     docker image prune -a -f
